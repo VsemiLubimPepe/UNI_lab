@@ -38,12 +38,36 @@ int matrix_fread(FILE *mtrx_file, struct matrix **mtrx)
 	    double real;
 	    double imag;
 	    fscanf(mtrx_file, "%lf %lf*i", &real, &imag);
-	    double _Complex read_number = CMPLX(real, imag);
+	    double _Complex read_number = real + imag * I;
 	    ((*mtrx)->values)[j + i * columns] = read_number;
 	}
     }
     
     return 0;
+}
+
+void matrix_print(struct matrix *mtrx)
+{
+    size_t rows = mtrx->rows;
+    size_t columns = mtrx->columns;
+
+    for (size_t i = 0; i < rows; i++) {
+        for (size_t j = 0; j < columns; j++) {
+            double _Complex element = (mtrx->values)[i + j * columns];
+            printf("%f%+f*i ", creal(element), cimag(element));
+        }
+        printf("\n");
+    }
+
+    return;
+}
+
+void matrix_free(struct matrix *mtrx)
+{
+    free(mtrx->values);
+    free(mtrx);
+
+    return;
 }
 
 struct matrix *matrix_sum(struct matrix *mtrx_1, struct matrix *mtrx_2)
@@ -99,17 +123,39 @@ struct matrix *matrix_mul(struct matrix *mtrx_1, struct matrix *mtrx_2)
     size_t columns = mtrx_2->columns;
     size_t common_dimension = mtrx_1->columns;
     struct matrix* mtrx = matrix_init(rows, columns);
+
     if (!mtrx)
         return NULL;
 
     for (size_t j = 0; j < columns; j++) {
         for (size_t i = 0; i < rows; i++) {
+            (mtrx->values)[i + j * columns] = 0.0 + 0.0*I;
             for (size_t n = 0; n < common_dimension; n++) {
                 (mtrx->values)[i + j * columns] +=
-                    (mtrx_1->values)[i + n] * (mtrx_2->values)[n + j];
+                    (mtrx_1->values)[i + n * common_dimension] * 
+                    (mtrx_2->values)[n + j * columns];
             }
         }
     }
 
     return mtrx;
+}
+
+struct matrix *matrix_transpose(struct matrix *mtrx)
+{
+    size_t rows = mtrx->rows;
+    size_t columns = mtrx->columns;
+
+    struct matrix *trans_mtrx = matrix_init(columns, rows);
+    if (!trans_mtrx)
+        return NULL;
+    
+    for (size_t i = 0; i < rows; i++) {
+        for (size_t j = 0; j < columns; j++) {
+            (trans_mtrx->values)[i * columns + j] = 
+            (mtrx->values)[i + j * rows];
+        }
+    }
+
+    return trans_mtrx;
 }
