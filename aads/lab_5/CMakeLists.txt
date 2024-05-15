@@ -1,11 +1,26 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(lab_5 LANGUAGES C)
+set(CMAKE_C_STADARD 11)
+set(CMAKE_C_STANDARD_REQUIRED True)
 
-add_executable(lab_5 matrix.c)
+project(create_matrix)
 
-include(GNUInstallDirs)
-install(TARGETS lab_5
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+project(lab_5)
+
+add_library(matrix STATIC matrix.c)
+
+add_executable(bench bench.c)
+
+target_link_libraries(bench matrix)
+
+set(create_matrix_SOURCE create_matrix.c)
+
+add_executable(create_matrix ${create_matrix_SOURCE})
+
+set(ORDER "2")
+
+add_custom_command(
+    TARGET create_matrix
+    POST_BUILD
+    COMMAND $<TARGET_FILE:create_matrix> ${ORDER}    
 )
