@@ -56,7 +56,6 @@ struct matrix *matrix_get_cut_column_vector(struct matrix *mtrx, size_t column, 
     if (!vector)
 	return NULL;
 
-    printf("I am before copying in geting cut vectro\n");
     memcpy(vector->values, mtrx->values + column * rows + first_row, sizeof(double _Complex) * (rows - first_row));
 
     return vector;
@@ -195,10 +194,13 @@ struct matrix *matrix_const_mul(struct matrix *mtrx, double _Complex number)
     struct matrix *new_mtrx = matrix_init(rows, columns);
     if (!new_mtrx)
 	return NULL;
+
+    new_mtrx->rows = rows;
+    new_mtrx->columns = columns;
     
-    for (size_t i = 0; i < rows; i++) {
-	for (size_t j = 0; j < columns; j++) {
-	    (new_mtrx->values)[j + i * columns] = number * (mtrx->values)[j + i * columns];
+    for (size_t j = 0; j < columns; j++) {
+	for (size_t i = 0; i < rows; i++) {
+	    (new_mtrx->values)[j * rows + i] = number * (mtrx->values)[j * rows + i];
 	}
     }
 
@@ -218,11 +220,14 @@ struct matrix *matrix_mul(struct matrix *mtrx_1, struct matrix *mtrx_2)
     if (!mtrx)
         return NULL;
 
+    mtrx->rows = rows;
+    mtrx->columns = columns;
+    
     for (size_t j = 0; j < columns; j++) {
         for (size_t i = 0; i < rows; i++) {
-            (mtrx->values)[i + j * columns] = 0.0 + 0.0*I;
+            (mtrx->values)[i + j * rows] = 0.0 + 0.0*I;
             for (size_t n = 0; n < common_dimension; n++) {
-                (mtrx->values)[i + j * columns] +=
+                (mtrx->values)[i + j * rows] +=
                     (mtrx_1->values)[i + n * rows] * 
                     (mtrx_2->values)[n + j * common_dimension];
             }
@@ -381,13 +386,12 @@ struct matrix *matrix_housholder_left_mul(struct matrix *mtrx, struct matrix *ho
     struct matrix *transposed_housholder_vector = matrix_transpose(housholder_vector);
     if (!transposed_housholder_vector)
 	return NULL;
-    
+
     struct matrix *hvt_hv_matrix = matrix_mul(transposed_housholder_vector, housholder_vector);
     if (!hvt_hv_matrix) {
 	matrix_free(transposed_housholder_vector);
 	return NULL;
     }
-
     double _Complex hvt_hv = (hvt_hv_matrix->values)[0];
     matrix_free(hvt_hv_matrix);
     matrix_free(transposed_housholder_vector);
@@ -397,7 +401,6 @@ struct matrix *matrix_housholder_left_mul(struct matrix *mtrx, struct matrix *ho
     struct matrix *transposed_matrix = matrix_transpose(mtrx);
     if (!transposed_matrix)
 	return NULL;
-    
     struct matrix *omega = matrix_mul(transposed_matrix, housholder_vector);
     omega = matrix_const_mul(omega, beta);
     
@@ -434,7 +437,7 @@ struct matrix *matrix_housholder_right_mul(struct matrix *mtrx, struct matrix *h
     struct matrix *transposed_housholder_vector = matrix_transpose(housholder_vector);
     if (!transposed_housholder_vector)
 	return NULL;
-    
+
     struct matrix *hvt_hv_matrix = matrix_mul(transposed_housholder_vector, housholder_vector);
     if (!hvt_hv_matrix) {
 	matrix_free(transposed_housholder_vector);
@@ -478,20 +481,12 @@ void matrix_housholder_transformation(struct matrix *mtrx)
     size_t rows = mtrx->rows;
     
     
-    for (size_t i = 0; i < rows - 1; i++) {
+    for (size_t i = 0; i < rows; i++) {
 	struct matrix *vector = matrix_get_cut_column_vector(mtrx, i, i);
-	if (!vector)
-	    printf("Vector is NULL.\n");
-	struct matrix *housholder_vector = matrix_housholder_vector(vector);
-	if (!housholder_vector)
-	    printf("Housholder vector is NULL.\n");
+        struct matrix *housholder_vector = matrix_housholder_vector(vector);
 	matrix_free(vector);
 	struct matrix *matrix_cut = matrix_cut_matrix(mtrx, i, i);
-	if (!matrix_cut)
-	    printf("Matrix cut is NULL.\n");
-	struct matrix *cut_hous_mul_left_matrix = matrix_housholder_left_mul(mtrx, housholder_vector);
-	if (!cut_hous_mul_left_matrix)
-	    printf("cut_house_mul_left_matrix is NULL.\n");
+	struct matrix *cut_hous_mul_left_matrix = matrix_housholder_left_mul(matrix_cut, housholder_vector);
 	matrix_free(matrix_cut);
 	matrix_paste_matrix(mtrx, cut_hous_mul_left_matrix, i, i);
 	matrix_free(cut_hous_mul_left_matrix);
