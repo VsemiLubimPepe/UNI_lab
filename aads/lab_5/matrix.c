@@ -809,3 +809,21 @@ void matrix_hessenberg_triangular_transformation(struct matrix *mtrx_a,
         }
     }
 }
+
+double _Complex matrix_get_triangular_determinant(struct matrix *triangular_matrix)
+{
+    size_t order = triangular_matrix->rows;
+
+    double _Complex determinant = 0.0 + 0.0 * I;
+    
+    for (size_t i = 0; i < order; i++) {
+	determinant *= (triangular_matrix->values)[i + i * order];
+    }
+
+    return determinant;
+}
+
+struct matrix *matrix_get_triangular_inverse(struct matrix *triangular_matrix)
+{
+    
+}
