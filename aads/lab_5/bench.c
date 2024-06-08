@@ -24,12 +24,12 @@ int main(int argc, char **argv)
     fclose(mtrx_a_file);
     fclose(mtrx_b_file);
 
-    printf("Matrix A\n");
-    matrix_print(mtrx_a);
+
+    printf("Old matrix B\n");
+
+    matrix_print(mtrx_b);
 
     printf("\n");
-    printf("Matrix B\n");
-    matrix_print(mtrx_b);
 
     //struct matrix *houshold_matrix;
 
@@ -37,7 +37,7 @@ int main(int argc, char **argv)
     
     printf("\n");
 
-    matrix_hessenberg_triangular_transformation(mtrx_a, mtrx_b);
+    matrix_hessenberg_triangular_transformation(&mtrx_a, mtrx_b);
 
     printf("\n"); 
 
@@ -49,20 +49,31 @@ int main(int argc, char **argv)
 
     //matrix_print(mtrx_c);
 
-    //printf("\n");
+    printf("New matrix B\n");
 
-    //matrix_print(mtrx_b);
+    matrix_print(mtrx_b);
 
-    //printf("\n");
+    printf("\n");
 
     //matrix_print(houshold_matrix);
     
     //printf("\n");
 
-    printf("\n");
-    printf("New matrix B\n");
-    matrix_print(mtrx_b);
+    struct matrix *mtrx_b_inverse = matrix_get_triangular_inverse(mtrx_b);
 
+    if (!mtrx_b_inverse) {
+        printf("Matrix B is degenerate.\n");
+        exit(1);
+    }
+
+    printf("Matrix B inverse\n");
+    matrix_print(mtrx_b_inverse);
+    printf("\n");   
+
+    struct matrix *b_b_i = matrix_mul(mtrx_b, mtrx_b_inverse);
+    printf("Is it really inverse:\n");
+    matrix_print(b_b_i);
+    printf("\n");
     //struct matrix *check = matrix_mul(houshold_matrix, mtrx_a);
     
     //printf("\n");
@@ -75,6 +86,8 @@ int main(int argc, char **argv)
     
     matrix_free(mtrx_a);
     matrix_free(mtrx_b);
+    matrix_free(mtrx_b_inverse);
+    matrix_free(b_b_i);
     //matrix_free(check);
     //matrix_free(houshold_matrix);
 

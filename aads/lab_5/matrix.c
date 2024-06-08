@@ -1,5 +1,6 @@
 #include <complex.h>
 #include <malloc.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "matrix.h"
@@ -57,6 +58,24 @@ struct matrix *matrix_get_identity_matrix(size_t order)
     }
 
     return identity_matrix;
+}
+
+struct matrix *matrix_get_zeros(size_t order)
+{
+    struct matrix *zeros_matrix = matrix_init(order, order);
+    if (!zeros_matrix)
+        return NULL;
+
+    zeros_matrix->rows = order;
+    zeros_matrix->columns = order;
+
+    for (size_t i = 0; i < order; i++) {
+        for (size_t j = 0; j < order; j++) {
+            (zeros_matrix->values)[j + i * order] = 0.0 + 0.0 * I;
+        }
+    }
+    
+    return zeros_matrix;
 }
 
 struct matrix *matrix_get_cut_column_vector(struct matrix *mtrx, 
@@ -336,49 +355,13 @@ struct givens_pair *givens_pair_find(double _Complex a, double _Complex b)
     
     if (cabs(b) > cabs(a)) {
         tau = -a / b;
-        printf("\n");
-        printf("Tau in finding givens:\n");
-        printf("tau = %f%+f*i\n", 
-            creal(tau), 
-            cimag(tau));
-        printf("\n");
         s = 1 / csqrt(1 + tau * tau);
-        printf("\n");
-        printf("S in finding givens:\n");
-        printf("s = %f%+f*i\n", 
-            creal(s), 
-            cimag(s));
-        printf("\n");
         c = s * tau;
-        printf("\n");
-        printf("C in finding givens:\n");
-        printf("c = %f%+f*i\n", 
-            creal(c), 
-            cimag(c));
-        printf("\n");
     }
     else {
         tau = -b / a;
-        printf("\n");
-        printf("Tau in finding givens:\n");
-        printf("tau = %f%+f*i\n", 
-            creal(tau), 
-            cimag(tau));
-        printf("\n");
         c = 1 / csqrt(1 + tau * tau);
-        printf("\n");
-        printf("C in finding givens:\n");
-        printf("c = %f%+f*i\n", 
-            creal(c), 
-            cimag(c));
-        printf("\n");
         s = c * tau;
-        printf("\n");
-        printf("S in finding givens:\n");
-        printf("s = %f%+f*i\n", 
-            creal(s), 
-            cimag(s));
-        printf("\n");
     }
 
     return givens_pair_init(c, s);
@@ -617,204 +600,93 @@ void matrix_housholder_transformation(struct matrix *mtrx, struct matrix **housh
     }
 }
 
-void matrix_hessenberg_triangular_transformation(struct matrix *mtrx_a, 
+void matrix_threshold_cut(struct matrix *mtrx, double threshold)
+{
+    size_t rows = mtrx->rows;
+    size_t columns = mtrx->columns;
+
+    for (size_t i = 0; i < rows; i++) {
+        for (size_t j = 0; j < columns; j++) {
+            double new_real = creal((mtrx->values)[i + j * rows]);
+            double new_imag = cimag((mtrx->values)[i + j * rows]);
+            if (fabs(new_real) < threshold)
+                new_real = 0.0;
+            if (fabs(new_imag) < threshold)
+                new_imag = 0.0;
+            (mtrx->values)[i + j * rows] = new_real + new_imag * I;
+        }
+    }
+}
+
+void matrix_hessenberg_triangular_transformation(struct matrix **mtrx_a, 
     struct matrix *mtrx_b)
 {
     struct matrix *housholder_matrix;
     matrix_housholder_transformation(mtrx_b, &housholder_matrix);
-
-    printf("\n");
-    printf("Housholder matrix\n");
-    matrix_print(housholder_matrix);
-    printf("\n");
-
     struct matrix *transposed_housholder_matrix = 
         matrix_transpose(housholder_matrix);
-
     struct matrix *new_mtrx_a = 
-        matrix_mul(transposed_housholder_matrix, mtrx_a);
-
-    printf("\n");
-    printf("Transposed housholder matrix\n");
-    matrix_print(transposed_housholder_matrix);
-    printf("\n");
-
-
-    printf("\n");
-    printf("Is it really orthogonal\n");
-    matrix_print(matrix_mul(housholder_matrix, transposed_housholder_matrix));
-    printf("\n");
+        matrix_mul(transposed_housholder_matrix, *mtrx_a);
 
     matrix_free(transposed_housholder_matrix);
-
-    printf("New matrix A\n");
-    printf("\n");
-    matrix_print(new_mtrx_a);
-    printf("\n");
-
-    printf("New matrix B\n");
-    printf("\n");
-    matrix_print(mtrx_b);
-    printf("\n");
 
     size_t order = new_mtrx_a->rows;
 
     for (size_t j = 0; j < order - 2; j++) {
         for (size_t i = order - 1; i > j + 1; i--) {
-
-            printf("\n");
-            printf("Numbers to compute givens pair:\n");
-            printf("%f%+f*i and %f%+f*i\n", 
-                creal((new_mtrx_a->values)[i - 1 + j * order]), 
-                cimag((new_mtrx_a->values)[i - 1 + j * order]),
-                creal((new_mtrx_a->values)[i + j * order]),
-                cimag((new_mtrx_a->values)[i + j * order]));
-            printf("\n");
-
             struct givens_pair *givens_pair = 
                 givens_pair_find((new_mtrx_a->values)[i - 1 + j * order], 
                     (new_mtrx_a->values)[i + j * order]);
 
-            printf("\n");
-            printf("Found givens pair:\n");
-            printf("c = %f%+f*i and s = %f%+f*i\n", 
-                creal(givens_pair->c), 
-                cimag(givens_pair->c),
-                creal(givens_pair->s),
-                cimag(givens_pair->s));
-            printf("\n");
-
             struct matrix *cut_mtrx_a = 
                 matrix_cut_row_matrix(new_mtrx_a, i - 1, i, j, order - 1);
-
-            printf("\n");
-            printf("Cutted part of new matrix A\n");
-            matrix_print(cut_mtrx_a);
-            printf("\n");
-
             struct matrix *rot_cut_mtrx_a = 
                 matrix_givens_left_mul(cut_mtrx_a, givens_pair);
-
-            printf("\n");
-            printf("Rotated cutted part of new matrix A\n");
-            matrix_print(rot_cut_mtrx_a);
-            printf("\n");
-
             matrix_paste_row_matrix(new_mtrx_a, rot_cut_mtrx_a, i-1, j);
-
-            printf("\n");
-            printf("New matrix A after pasting cutted part\n");
-            matrix_print(new_mtrx_a);
-            printf("\n");
 
             matrix_free(rot_cut_mtrx_a);
             matrix_free(cut_mtrx_a);
 
             struct matrix *cut_mtrx_b = 
                 matrix_cut_row_matrix(mtrx_b, i - 1, i, i - 1, order - 1);
-
-            printf("\n");
-            printf("Cutted part of new matrix B\n");
-            matrix_print(cut_mtrx_b);
-            printf("\n");
-
             struct matrix *rot_cut_mtrx_b = 
                 matrix_givens_left_mul(cut_mtrx_b, givens_pair);
-
-            printf("\n");
-            printf("Rotated cutted part of new matrix B\n");
-            matrix_print(rot_cut_mtrx_b);
-            printf("\n");
-
             matrix_paste_row_matrix(mtrx_b, rot_cut_mtrx_b, i-1, i - 1);
-
-            printf("\n");
-            printf("New matrix B after pasting cutted part\n");
-            matrix_print(mtrx_b);
-            printf("\n");
 
             matrix_free(rot_cut_mtrx_b);
             matrix_free(cut_mtrx_b);
             free(givens_pair);
 
-            printf("\n");
-            printf("Numbers to compute givens pair:\n");
-            printf("%f%+f*i and %f%+f*i\n", 
-                creal((mtrx_b->values)[i + (i - 1) * order]), 
-                cimag((mtrx_b->values)[i + (i - 1) * order]),
-                creal((mtrx_b->values)[i + i * order]),
-                cimag((mtrx_b->values)[i + i * order]));
-            printf("\n");
-
             givens_pair = 
                 givens_pair_find((mtrx_b->values)[i + (i - 1) * order], 
                     (mtrx_b->values)[i + i * order]);
 
-            printf("\n");
-            printf("Found givens pair:\n");
-            printf("c = %f%+f*i and s = %f%+f*i\n", 
-                creal(givens_pair->c), 
-                cimag(givens_pair->c),
-                creal(givens_pair->s),
-                cimag(givens_pair->s));
-            printf("\n");
-
             cut_mtrx_a = matrix_cut_row_matrix(new_mtrx_a, 0, order - 1, i - 1, i);
-
-            printf("\n");
-            printf("Cutted part of new matrix A\n");
-            matrix_print(cut_mtrx_a);
-            printf("\n");
-
             rot_cut_mtrx_a = matrix_givens_right_mul(cut_mtrx_a, givens_pair);
-
-            printf("\n");
-            printf("Rotated cutted part of new matrix A\n");
-            matrix_print(rot_cut_mtrx_a);
-            printf("\n");
-
             matrix_paste_row_matrix(new_mtrx_a, rot_cut_mtrx_a, 0, i - 1);
-
-            printf("\n");
-            printf("New matrix A after pasting cutted part\n");
-            matrix_print(new_mtrx_a);
-            printf("\n");
 
             matrix_free(rot_cut_mtrx_a);
             matrix_free(cut_mtrx_a);
 
             cut_mtrx_b = matrix_cut_row_matrix(mtrx_b, 0, i, i - 1, i);
-
-            printf("\n");
-            printf("Cutted part of new matrix B\n");
-            matrix_print(cut_mtrx_b);
-            printf("\n");
-
             rot_cut_mtrx_b = matrix_givens_right_mul(cut_mtrx_b, givens_pair);
-
-            printf("\n");
-            printf("Rotated cutted part of new matrix B\n");
-            matrix_print(rot_cut_mtrx_b);
-            printf("\n");
-
             matrix_paste_row_matrix(mtrx_b, rot_cut_mtrx_b, 0, i - 1);
-            printf("\n");
-            printf("New matrix B after pasting cutted part\n");
-            matrix_print(mtrx_b);
-            printf("\n");
 
             matrix_free(rot_cut_mtrx_b);
             matrix_free(cut_mtrx_b);
             free(givens_pair);
         }
     }
+
+    matrix_free(*mtrx_a);
+    *mtrx_a = new_mtrx_a;
 }
 
 double _Complex matrix_get_triangular_determinant(struct matrix *triangular_matrix)
 {
     size_t order = triangular_matrix->rows;
 
-    double _Complex determinant = 0.0 + 0.0 * I;
+    double _Complex determinant = 1.0 + 0.0 * I;
     
     for (size_t i = 0; i < order; i++) {
 	determinant *= (triangular_matrix->values)[i + i * order];
@@ -823,7 +695,106 @@ double _Complex matrix_get_triangular_determinant(struct matrix *triangular_matr
     return determinant;
 }
 
+double _Complex matrix_get_diagonal_mul(struct matrix *mtrx)
+{
+    double _Complex diagonal_mul = 1.0 + 0.0 * I;
+
+    size_t rows = mtrx->rows;
+    size_t columns = mtrx->columns;
+
+    size_t rank;
+    if (rows > columns)
+        rank = columns;
+    else
+        rank = rows;
+    
+    for (size_t i = 0; i < rank; i++) {
+        diagonal_mul *= (mtrx->values)[i * rows + i];
+    }
+
+    return diagonal_mul;
+}
+
 struct matrix *matrix_get_triangular_inverse(struct matrix *triangular_matrix)
 {
-    
+    if (matrix_get_triangular_determinant(triangular_matrix) == 0.0 + 0.0 * I)
+        return NULL;
+
+    size_t order = triangular_matrix->rows;
+
+    struct matrix *diagonal_inverse = matrix_get_zeros(order);
+
+    for (size_t i = 0; i < order; i++) {
+        printf("Diagonal number %.15f%+.15f*i\n", 
+            creal((triangular_matrix->values)[i + i * order]), 
+            cimag((triangular_matrix->values)[i + i * order]));
+        (diagonal_inverse->values)[i + i * order] = 
+            1 / (triangular_matrix->values)[i + i * order];
+    }
+
+    printf("Diagonal inverse\n");
+    matrix_print(diagonal_inverse);
+    printf("\n");
+
+    struct matrix *inverse_upper_part = matrix_get_zeros(order);
+
+    for (size_t i = 0; i < order; i++) {
+        for (size_t j = 0; j < order; j++) {
+            if (i < j)
+                (inverse_upper_part->values)[i + j * order] = 
+                    (triangular_matrix->values)[i + j * order];
+        }
+    }
+
+    printf("Inverse upper part\n");
+    matrix_print(inverse_upper_part);
+    printf("\n");
+
+    struct matrix *negative_diagonal_inverse = 
+        matrix_const_mul(diagonal_inverse, -1.0 + 0.0 * I);
+
+    printf("Negative diagonal inverse\n");
+    matrix_print(negative_diagonal_inverse);
+    printf("\n");
+
+    struct matrix *diag_upper_1 = matrix_get_identity_matrix(order);
+    struct matrix *diag_upper_2 = matrix_mul(negative_diagonal_inverse, 
+        inverse_upper_part);
+
+    printf("Diag upper 1\n");
+    matrix_print(diag_upper_1);
+    printf("\n");
+
+    printf("Diag upper 2\n");
+    matrix_print(diag_upper_2);
+    printf("\n");
+
+    matrix_free(inverse_upper_part);
+    matrix_free(negative_diagonal_inverse);
+
+    struct matrix *sum = matrix_sum(diag_upper_1, diag_upper_2);
+
+    matrix_free(diag_upper_1);
+
+    struct matrix *prev = diag_upper_2;
+
+    for (size_t i = 2; i < order; i++) {
+        struct matrix *curr = matrix_mul(diag_upper_2, prev);
+        struct matrix *temp_sum = matrix_sum(sum, curr);
+        matrix_free(sum);
+        sum = temp_sum;
+        if (prev != diag_upper_2)
+            matrix_free(prev);
+        prev = curr;
+    }
+
+    matrix_free(prev);
+
+    struct matrix *inverse = matrix_mul(sum, diagonal_inverse);
+
+    matrix_free(sum);
+    matrix_free(diagonal_inverse);
+    matrix_free(diag_upper_2);
+
+    return inverse;
 }

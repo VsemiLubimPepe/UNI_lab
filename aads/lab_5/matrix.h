@@ -50,8 +50,9 @@ struct matrix *matrix_housholder_right_mul(struct matrix *mtrx,
                                             struct matrix* housholder_vector);
 void matrix_housholder_transformation(struct matrix *mtrx, 
                                         struct matrix **houshold_matrix);
-void matrix_hessenberg_triangular_transformation(struct matrix *mtrx_a, 
+void matrix_hessenberg_triangular_transformation(struct matrix **mtrx_a, 
     struct matrix *mtrx_b);
+struct matrix *matrix_get_triangular_inverse(struct matrix *triangular_matrix);
 void matrix_print(struct matrix *mtrx);
 void matrix_free(struct matrix *mtrx);
 
