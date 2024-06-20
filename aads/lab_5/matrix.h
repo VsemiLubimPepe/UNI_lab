@@ -32,7 +32,11 @@ struct matrix *matrix_cut_row_matrix(struct matrix * mtrx, size_t row,
 int matrix_paste_matrix(struct matrix *mtrx_1, struct matrix *mtrx_2, 
                             size_t row, size_t column);
 int matrix_paste_row_matrix(struct matrix *mtrx_1, struct matrix *mtrx_2,
-    size_t row, size_t column);                       
+    size_t row, size_t column);
+double _Complex matrix_determinant(struct matrix *mtrx);
+struct matrix *matrix_get_minor_matrix(struct matrix *mtrx, size_t row, 
+    size_t column);
+struct matrix *matrix_dot_mirror(struct matrix *mtrx); 
 struct matrix *matrix_const_mul(struct matrix *mtrx, double _Complex number);
 struct givens_pair *givens_pair_find(double _Complex a, double _Complex b);
 struct matrix *matrix_givens_left_mul(struct matrix *mtrx, 
@@ -53,7 +57,11 @@ void matrix_housholder_transformation(struct matrix *mtrx,
 void matrix_hessenberg_triangular_transformation(struct matrix **mtrx_a, 
     struct matrix *mtrx_b);
 struct matrix *matrix_get_triangular_inverse(struct matrix *triangular_matrix);
+struct matrix *matrix_inverse(struct matrix *mtrx);
+void qz_step(struct matrix **mtrx_a, struct matrix **mtrx_b);
+void qz_process(struct matrix **mtrx_a, struct matrix **mtrx_b);
 void matrix_print(struct matrix *mtrx);
+void complex_print(double _Complex num);
 void matrix_free(struct matrix *mtrx);
 
 
