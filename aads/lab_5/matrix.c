@@ -6,164 +6,143 @@
 #include "matrix.h"
 #include "thresholds.h"
 
+/*
+ * Zero threshold for complex number parts.
+ */
 double threshold;
+/*
+ * Threshold multiplier for values of matrix A subdiagonal elements.
+ */
 double epsilon;
 
+/*
+ * Value of zero in complex form.
+ */
+const double _Complex zero = 0.0 + 0.0 * I;
+
+/*
+ * Prints complex number NUM.
+ */
 void complex_print(double _Complex num)
 {
     printf("%f%+f*i\n", creal(num), cimag(num));
 }
 
+/*
+ * Prepares empty matrix of size ROWS x COLUMNS.
+ */
 struct matrix *matrix_init(size_t rows, size_t columns)
 {
+    // Allocating memory for matrix struct.
     struct matrix *mtrx = malloc(sizeof(struct matrix));
     if (!mtrx)
         return NULL;
 
+    // Allocating memory for matrix elements.
     mtrx->values = malloc(sizeof(double _Complex) * rows * columns);
     if (!(mtrx->values)) {
         free(mtrx);
         return NULL;
     }
 
+    // Storing info about matrix size.
     mtrx->rows = rows;
     mtrx->columns = columns;
 
     return mtrx;
 }
 
-struct matrix *matrix_get_column_vector(struct matrix *mtrx, size_t column)
-{
-    size_t rows = mtrx->rows;
-
-    struct matrix *vector = matrix_init(rows, 1);
-    if (!vector)
-	    return NULL;
-
-    memcpy(vector->values, mtrx->values + column * rows, 
-            sizeof(double _Complex) * rows);
-
-    return vector;
-}
-
+/*
+ * Returns identity matrix of ORDER order (allocates new matrix).
+ */
 struct matrix *matrix_get_identity_matrix(size_t order)
 {
+    // Preparing empty matrix.
     struct matrix *identity_matrix = matrix_init(order, order);
     if (!identity_matrix)
 	    return NULL;
 
-    identity_matrix->rows = order;
-    identity_matrix->columns = order;
-
+    // Making identity matrix.
     for (size_t j = 0; j < order; j++)
         for (size_t i = 0; i < order; i++) {
             if (i == j)
                 (identity_matrix->values)[j + i * order] = 1.0 + 0.0 * I;
             else
-                (identity_matrix->values)[j + i * order] = 0.0 + 0.0 * I;
+                (identity_matrix->values)[j + i * order] = zero;
         }
 
     return identity_matrix;
 }
 
+/*
+ * Return zero matrix of order ORDER.
+ */
 struct matrix *matrix_get_zeros(size_t order)
 {
+    // Preparing empty matrix.
     struct matrix *zeros_matrix = matrix_init(order, order);
     if (!zeros_matrix)
         return NULL;
 
-    zeros_matrix->rows = order;
-    zeros_matrix->columns = order;
-
+    // Making zero matrix.
     for (size_t i = 0; i < order; i++)
         for (size_t j = 0; j < order; j++)
-            (zeros_matrix->values)[j + i * order] = 0.0 + 0.0 * I;
+            (zeros_matrix->values)[j + i * order] = zero;
     
     return zeros_matrix;
 }
 
-struct matrix *matrix_get_cut_column_vector(struct matrix *mtrx, 
-                                                size_t column, size_t first_row)
+/*
+ * Returns submatrix starting from element (ROW, COLUMN) 
+ * and ending on element (END_ROW, END_COLUMN).
+ */
+struct matrix *matrix_cut_matrix(struct matrix *mtrx, size_t row, 
+    size_t end_row, size_t column, size_t end_column)
 {
+    // Rows of MTRX
     size_t rows = mtrx->rows;
 
-    struct matrix *vector = matrix_init(rows - first_row, 1);
-    if (!vector)
-	    return NULL;
+    // Rows of cut matrix.
+    size_t cut_rows = end_row - row + 1;
+    // Columns of cut matrix.
+    size_t cut_columns = end_column - column + 1;
 
-    memcpy(vector->values, mtrx->values + column * rows + first_row, 
-            sizeof(double _Complex) * (rows - first_row));
+    // Preparing empty cut matrix.
+    struct matrix *cut_mtrx = matrix_init(cut_rows, cut_columns);  
+    if(!cut_mtrx)
+        return NULL;
 
-    return vector;
-}
-
-struct matrix *matrix_cut_matrix(struct matrix *mtrx, size_t row, size_t column)
-{
-    size_t rows = mtrx->rows;
-    size_t columns = mtrx->columns;
-
-    struct matrix *cut_mtrx = matrix_init(rows - row, columns - column);
-    if (!cut_mtrx)
-	    return NULL;
-
-    for (size_t i = 0; i < columns - column; i++)
-	    memcpy(cut_mtrx->values + i * (rows - row), mtrx->values + 
-            (column + i) * rows + row, sizeof(double _Complex) * (rows - row));
+    // Filling cut matrix with needed values of MTRX.
+    for (size_t j = 0; j < cut_columns; j++)
+        for (size_t i = 0; i < cut_rows; i++)
+            (cut_mtrx->values)[j * (cut_rows) + i] = 
+                (mtrx->values)[row + i + (column + j) * rows];
 
     return cut_mtrx;
 }
 
-int matrix_paste_matrix(struct matrix *mtrx_1, 
-                        struct matrix *mtrx_2, size_t row, size_t column)
-{
-    size_t mtrx_1_rows = mtrx_1->rows;
-    size_t mtrx_1_columns = mtrx_1->columns;
-    size_t mtrx_2_rows = mtrx_2->rows;
-    size_t mtrx_2_columns = mtrx_2->columns;
-
-    if ((mtrx_1_rows - row != mtrx_2_rows) || (mtrx_1_columns - column != mtrx_2_columns))
-	    return -1;
-
-    for (size_t i = 0; i < mtrx_2_columns; i++)
-	    memcpy(mtrx_1->values + (column + i) * mtrx_1_rows + row, 
-                mtrx_2->values + i * mtrx_2_rows,
-                sizeof(double _Complex) * mtrx_2_rows);
-
-    return 0;
-}
-
-struct matrix *matrix_cut_row_matrix(struct matrix * mtrx, size_t row, 
-    size_t end_row, size_t column, size_t end_column)
-{
-    size_t rows = mtrx->rows;
-    size_t columns = mtrx->columns;
-
-    size_t cut_rows = rows - row - (rows - end_row - 1);
-    size_t cut_columns = columns - column - (columns - end_column - 1);
-
-    struct matrix *cut_row_mtrx = matrix_init(cut_rows, cut_columns);  
-    if(!cut_row_mtrx)
-        return NULL;
-
-    for (size_t j = 0; j < cut_columns; j++)
-        for (size_t i = 0; i < cut_rows; i++)
-            (cut_row_mtrx->values)[j * (cut_rows) + i] = 
-                (mtrx->values)[row + i + (column + j) * rows];
-
-    return cut_row_mtrx;
-}
-
-int matrix_paste_row_matrix(struct matrix *mtrx_1, struct matrix *mtrx_2, 
+/*
+ * Inserts submatrix MTRX_2 into matrix MTRX_1 starting 
+ * from element (ROW, COLUMN).
+ */
+int matrix_paste_matrix(struct matrix *mtrx_1, struct matrix *mtrx_2, 
     size_t row, size_t column)
 {
+    // Rows of target matrix.
     size_t mtrx_1_rows = mtrx_1->rows;
+    // Columns of target matrix.
     size_t mtrx_1_columns = mtrx_1->columns;
+    // Rows of paste matrix.
     size_t mtrx_2_rows = mtrx_2->rows;
+    // Columns of paste matrix
     size_t mtrx_2_columns = mtrx_2->columns;
 
-    if ((mtrx_1_rows - row < mtrx_2_rows) || (mtrx_1_columns - column < mtrx_2_columns))
+    // Checking if paste matrix would fit in designated place of target matrix.
+    if ((mtrx_1_rows - row < mtrx_2_rows) || 
+        (mtrx_1_columns - column < mtrx_2_columns))
 	    return -1;
 
+    // Filling values from paste matrix in target matrix.
     for (size_t j = 0; j < mtrx_2_columns; j++)
 	    for (size_t i = 0; i < mtrx_2_rows; i++)
             (mtrx_1->values)[row + i + (column + j) * mtrx_1_rows] = 
@@ -172,21 +151,37 @@ int matrix_paste_row_matrix(struct matrix *mtrx_1, struct matrix *mtrx_2,
     return 0;
 }
 
+/*
+ * Reads matrix from a file.
+ * File format:
+ * ROWS COLUMNS
+ * MATRIX_ROW
+ * ...
+ * MATRIX_ROW
+ */
 int matrix_fread(FILE *mtrx_file, struct matrix **mtrx)
 {
+    // Rows of read matrix.
     size_t rows;
+    // Columns of read matrix.
     size_t columns;
-    fscanf(mtrx_file, "%zu %zu ", &rows, &columns);
+
+    // Checking if ROWS and COLUMNS were read successfully.
+    if (fscanf(mtrx_file, "%zu %zu", &rows, &columns) != 2)
+        return -1;
     
+    // Preparing empty matrix.
     *mtrx = matrix_init(rows, columns);
     if (!*mtrx)
 	    return -1;
     
+    // Reading values from file into matrix.
     for (size_t i = 0; i < rows; i++)
         for (size_t j = 0; j < columns; j++) {
             double real;
             double imag;
-            fscanf(mtrx_file, "%lf %lf*i", &real, &imag);
+            if (fscanf(mtrx_file, "%lf %lf*i", &real, &imag) != 2)
+                return -1;
             double _Complex read_number = real + imag * I;
             ((*mtrx)->values)[i + j * rows] = read_number;
         }
@@ -194,77 +189,94 @@ int matrix_fread(FILE *mtrx_file, struct matrix **mtrx)
     return 0;
 }
 
-void matrix_print(struct matrix *mtrx)
-{
-    size_t rows = mtrx->rows;
-    size_t columns = mtrx->columns;
-
-    for (size_t i = 0; i < rows; i++) {
-        for (size_t j = 0; j < columns; j++) {
-            double _Complex element = (mtrx->values)[i + j * rows];
-            printf("%f%+.1f*i ", creal(element), cimag(element));
-        }
-        printf("\n");
-    }
-
-    return;
-}
-
+/*
+ * Frees allocated memory of the matrix MTRX.
+ */
 void matrix_free(struct matrix *mtrx)
 {
+    // Freeing memory allocated for matrix elements.
     free(mtrx->values);
+    // Freeing memory allocated for matrix struct.
     free(mtrx);
-
-    return;
 }
 
+/*
+ * Sets zeros in parts of complex number, if they are close to zero.
+ */
 double _Complex complex_threshold_cut(double _Complex number)
 {
+    // Real part of NUMBER.
     double new_real = creal(number);
+    // Imaginary part of NUMBER.
     double new_imag = cimag(number);
-
+    
+    // Checking if real part of NUMBER should be zeroed.
     if ((new_real < threshold) && (new_real > -threshold))
         new_real = 0.0;
+    // Checking if imaginary part of NUMBER should be zeroed.
     if ((new_imag < threshold) && (new_imag > -threshold))
         new_imag = 0.0;
 
     return new_real + new_imag * I; 
 }
 
+/*
+ * Sets zeros in parts of complex numbers of matrix, if they are close to zero.
+ */
 void matrix_threshold_cut(struct matrix *mtrx)
 {
+    // Rows of MTRX.
     size_t rows = mtrx->rows;
+    // Columns of MTRX.
     size_t columns = mtrx->columns;
 
+    // Handling of all elements of MTRX.
     for (size_t i = 0; i < rows; i++)
         for (size_t j = 0; j < columns; j++)
             mtrx->values[i + j * rows] = 
                 complex_threshold_cut(mtrx->values[i + j * rows]);
 }
 
+/*
+ * Returns the matrix reflected relatively to the first (or last) 
+ * diagonal element of MTRX (allocates memory).
+ */
 struct matrix *matrix_dot_mirror(struct matrix *mtrx)
 {
+    // Rows of MTRX.
     size_t rows = mtrx->rows;
+    // Columns of MTRX.
     size_t columns = mtrx->columns;
 
+    // Preparing empty mirrored matrix.
     struct matrix *mirror = matrix_init(rows, columns);
 
+    // Filling mirrored matrix.
     for (size_t i = 0; i < rows; i++)
         for (size_t j = 0; j < columns; j++)
             (mirror->values)[i + j * rows] = 
-                (mtrx->values)[rows - 1 - i + (columns - 1 - j) * rows];
+                conj((mtrx->values)[rows - 1 - i + (columns - 1 - j) * rows]);
 
     return mirror;
 }
 
+/*
+ * Returns the submatrix from matrix MTRX for finding minor (allocates memory).
+ */
 struct matrix *matrix_get_minor_matrix(struct matrix *mtrx, size_t row, 
     size_t column)
 {
+    // Order of MTRX.
     size_t order = mtrx->rows;
+    // Row which should be omited.
     size_t row_counter = 0;
+    // Column which should be omited.
     size_t column_counter = 0;
 
+    // Preparing empty minor matrix.
     struct matrix *minor_matrix = matrix_init(order - 1, order - 1);
+
+    // Filling minor matrix.
     for (size_t i = 0; i < row; i++) {
         for (size_t j = 0; j < column; j++) {
             (minor_matrix->values)[row_counter + column_counter * (order - 1)] =
@@ -297,93 +309,119 @@ struct matrix *matrix_get_minor_matrix(struct matrix *mtrx, size_t row,
     return minor_matrix;
 }
 
+/*
+ * Returns the sum of argument matrices (allocates new matrix).
+ */
 struct matrix *matrix_sum(struct matrix *mtrx_1, struct matrix *mtrx_2)
 {
+    // Checking if sizes of matrices are equal.
     if ((mtrx_1->rows != mtrx_2->rows) || (mtrx_1->columns != mtrx_2->columns))
         return NULL;
 
+    // Rows of matrices.
     size_t rows = mtrx_1->rows;
+    // Columns of matrices.
     size_t columns = mtrx_1->columns;
- 
+    
+    // Preparing empty sum matrix.
     struct matrix *mtrx = matrix_init(rows, columns);
     if(!mtrx)
         return NULL;
 
+    // Filling sum matrix.
     for (size_t j = 0; j < columns; j++)
         for(size_t i = 0; i < rows; i++)
-            (mtrx->values)[i + j * columns] = 
-                (mtrx_1->values)[i + j * columns] + 
-                (mtrx_2->values)[i + j * columns];
+            (mtrx->values)[i + j * rows] = 
+                (mtrx_1->values)[i + j * rows] + 
+                (mtrx_2->values)[i + j * rows];
 
+    // Handling all values which are close to zero.
     matrix_threshold_cut(mtrx);
 
     return mtrx;
 }
 
+/*
+ * Returns the difference of argument matrices (allocates new matrix).
+ */
 struct matrix *matrix_dif(struct matrix *mtrx_1, struct matrix *mtrx_2)
 {
+    // Checking if sizes of matrices are equal.
     if ((mtrx_1->rows != mtrx_2->rows) || (mtrx_1->columns != mtrx_2->columns))
         return NULL;
 
+    // Rows of matrices.
     size_t rows = mtrx_1->rows;
+    // Columns of matrices.
     size_t columns = mtrx_1->columns;
 
+    // Preparing empty difference matrix.
     struct matrix *mtrx = matrix_init(rows, columns);
     if(!mtrx)
         return NULL;
 
+    // Filling difference matrix.
     for (size_t j = 0; j < columns; j++)
         for(size_t i = 0; i < rows; i++)
-            (mtrx->values)[i + j * columns] =
-                (mtrx_1->values)[i + j * columns] - 
-                (mtrx_2->values)[i + j * columns];
+            (mtrx->values)[i + j * rows] =
+                (mtrx_1->values)[i + j * rows] - 
+                (mtrx_2->values)[i + j * rows];
 
+    // Handling all values which are close to zero.
     matrix_threshold_cut(mtrx);
 
     return mtrx;
 }
 
+/*
+ * Returns the product of MTRX and CONST value (allocates memory).
+ */
 struct matrix *matrix_const_mul(struct matrix *mtrx, double _Complex number)
 {
+    // Rows of matrix.
     size_t rows = mtrx->rows;
+    // Columns of matrix.
     size_t columns = mtrx->columns;
 
+    // Preparing empty product matrix.
     struct matrix *new_mtrx = matrix_init(rows, columns);
     if (!new_mtrx)
 	    return NULL;
-
-    new_mtrx->rows = rows;
-    new_mtrx->columns = columns;
     
+    // Filling product matrix.
     for (size_t j = 0; j < columns; j++)
         for (size_t i = 0; i < rows; i++)
             (new_mtrx->values)[j * rows + i] = 
                 number * (mtrx->values)[j * rows + i];
 
+    // Handling all values which are close to zero.
     matrix_threshold_cut(new_mtrx);
 
     return new_mtrx;
 }
 
+/*
+ * Returns the product of argument matrices (allocates new matrix).
+ */
 struct matrix *matrix_mul(struct matrix *mtrx_1, struct matrix *mtrx_2)
 {
+    // Checking if matrices can be multiplied.
     if (mtrx_1->columns != mtrx_2->rows)
         return NULL;
 
     size_t rows = mtrx_1->rows;
     size_t columns = mtrx_2->columns;
     size_t common_dimension = mtrx_1->columns;
+    
+    // Preparing empty product matrix.
     struct matrix* mtrx = matrix_init(rows, columns);
-
     if (!mtrx)
         return NULL;
-
-    mtrx->rows = rows;
-    mtrx->columns = columns;
     
+    // Filling product matrix.
     for (size_t j = 0; j < columns; j++)
         for (size_t i = 0; i < rows; i++) {
-            (mtrx->values)[i + j * rows] = 0.0 + 0.0*I;
+            (mtrx->values)[i + j * rows] = zero;
             for (size_t n = 0; n < common_dimension; n++) {
                 (mtrx->values)[i + j * rows] +=
                     (mtrx_1->values)[i + n * rows] * 
@@ -391,45 +429,60 @@ struct matrix *matrix_mul(struct matrix *mtrx_1, struct matrix *mtrx_2)
             }
         }
 
+    // Handling all values which are close to zero.
     matrix_threshold_cut(mtrx);
 
     return mtrx;
 }
 
-struct matrix *matrix_transpose(struct matrix *mtrx)
+/*
+ * Returns Hermitian transpose of MTRX.
+ */
+struct matrix *matrix_hermitian_transpose(struct matrix *mtrx)
 {
     size_t rows = mtrx->rows;
     size_t columns = mtrx->columns;
 
+    // Preparing empty Hermitian transpose of MTRX
     struct matrix *trans_mtrx = matrix_init(columns, rows);
     if (!trans_mtrx)
         return NULL;
     
+    // Filling Hermitian transpose of MTRX
     for (size_t i = 0; i < rows; i++)
         for (size_t j = 0; j < columns; j++)
             (trans_mtrx->values)[i * columns + j] = 
-                (mtrx->values)[i + j * rows];
+                conj((mtrx->values)[i + j * rows]);
 
     return trans_mtrx;
 }
 
+/*
+ * Returns givens pair (allocates new givens pair).
+ */
 struct givens_pair *givens_pair_init(double _Complex c, double _Complex s)
 {
+    // Allocating memory for givens pair struct.
     struct givens_pair *givens_pair = malloc(sizeof(struct givens_pair));
     givens_pair->c = c;
     givens_pair->s = s;
     return givens_pair;
 }
 
+/*
+ * Returns Givens pair for Givens rotation (allocates memory).
+ */
 struct givens_pair *givens_pair_find(double _Complex a, double _Complex b)
 {
-    if ((creal(b) == 0.0) && (cimag(b) == 0.0))
-	return givens_pair_init(1 + 0 * I, 0 + 0 * I);
+    if (b == zero)
+	    return givens_pair_init(1 + 0 * I, 0 + 0 * I);
 
     double _Complex tau;
+    // Elements of givens pair.
     double _Complex s;
     double _Complex c;
     
+    // Choosing such givens pair elements that there would be no precision loss.
     if (cabs(b) > cabs(a)) {
         tau = -a / b;
         s = 1 / csqrt(1 + tau * tau);
@@ -441,24 +494,29 @@ struct givens_pair *givens_pair_find(double _Complex a, double _Complex b)
         s = c * tau;
     }
 
+    // Handling values which are close to zero.
     c = complex_threshold_cut(c);
     s = complex_threshold_cut(s);
 
     return givens_pair_init(c, s);
 }
 
-struct matrix *matrix_givens_left_mul(struct matrix *mtrx, struct givens_pair *givens_pair)
+/*
+ * Returns the product of Givens matrix and MTRX (GM * MTRX) (allocates memory).
+ */
+struct matrix *matrix_givens_left_mul(struct matrix *mtrx, 
+    struct givens_pair *givens_pair)
 {
     size_t rows = mtrx->rows;
     size_t columns = mtrx->columns;
 
-    struct matrix *rotated_mtrx = matrix_init(rows, columns);
+    // Copying MTRX.
+    struct matrix *rotated_mtrx = 
+        matrix_cut_matrix(mtrx, 0, rows - 1, 0, columns - 1);
     if (!rotated_mtrx)
 	    return NULL;
 
-    memcpy(rotated_mtrx->values, mtrx->values,
-	   sizeof(double _Complex) * rows * columns);
-
+    // Changing values of MTRX which were affected by rotation.
     for (size_t j = 0; j < columns; j++) {
         double _Complex tau_1 = (rotated_mtrx->values)[j * rows];
         double _Complex tau_2 = (rotated_mtrx->values)[j * rows + 1];
@@ -468,23 +526,28 @@ struct matrix *matrix_givens_left_mul(struct matrix *mtrx, struct givens_pair *g
             givens_pair->s * tau_1 + givens_pair->c * tau_2;
     }
 
+    // Handling elements which are close to zero.
     matrix_threshold_cut(rotated_mtrx);
 
     return rotated_mtrx;
 }
 
-struct matrix *matrix_givens_right_mul(struct matrix *mtrx, struct givens_pair *givens_pair)
+/*
+ * Returns the product of MTRX and Givens matrix (MTRX * GM) (allocates memory).
+ */
+struct matrix *matrix_givens_right_mul(struct matrix *mtrx, 
+    struct givens_pair *givens_pair)
 {
     size_t rows = mtrx->rows;
     size_t columns = mtrx->columns;
 
-    struct matrix *rotated_mtrx = matrix_init(rows, columns);
+    // Copying MTRX.
+    struct matrix *rotated_mtrx = 
+        matrix_cut_matrix(mtrx, 0, rows - 1, 0, columns - 1);
     if (!rotated_mtrx)
 	    return NULL;
 
-    memcpy(rotated_mtrx->values, mtrx->values,
-	   sizeof(double _Complex) * rows * columns);
-
+    // Changing values of MTRX which were affected by rotation.
     for (size_t i = 0; i < rows; i++) {
         double _Complex tau_1 = (rotated_mtrx->values)[i];
         double _Complex tau_2 = (rotated_mtrx->values)[i + rows];
@@ -494,67 +557,74 @@ struct matrix *matrix_givens_right_mul(struct matrix *mtrx, struct givens_pair *
             givens_pair->s * tau_1 + givens_pair->c * tau_2;
     }
 
+    // Handling elements which are close to zero.
     matrix_threshold_cut(rotated_mtrx);
 
     return rotated_mtrx;
 }
 
-int  matrix_vector_norm(struct matrix *vector, double _Complex *norm)
+/*
+ * Returns the euclidean norm of VECTOR.
+ */
+void matrix_vector_norm(struct matrix *vector, double _Complex *norm)
 {
-    struct matrix *transposed_vector = matrix_transpose(vector);
-    if (!transposed_vector)
-	    return -1;
+    size_t rows = vector->rows;
 
-    struct matrix *norm_matrix = matrix_mul(transposed_vector, vector);
-    if (!norm_matrix) {
-        matrix_free(transposed_vector);
-        return -1;
-    }
+    double _Complex found_norm = 0;
 
-    *norm = csqrt((norm_matrix->values)[0]);
-    
-    matrix_free(transposed_vector);
-    matrix_free(norm_matrix);
-    
-    return 0;
+    // Calculating VECTOR norm.
+    for (size_t i = 0; i < rows; i++)
+        found_norm += (vector->values)[i] * conj((vector->values)[i]);
+
+    *norm = csqrt(found_norm);
 }
 
-
+/*
+ * Returns the Householder vector of VECTOR (allocates memory).
+ */
 struct matrix *matrix_housholder_vector(struct matrix *vector)
 {
-    struct matrix *housholder_vector = matrix_init(vector->rows, vector->columns);
+    // Preparing empty housholder vector.
+    struct matrix *housholder_vector = 
+        matrix_init(vector->rows, vector->columns);
+
+    size_t vector_length = vector->rows;
     
-    size_t vector_length;
-    if (vector->rows > vector->columns)
-	    vector_length = vector->rows;
-    else
-	    vector_length = vector->columns;
-    
+    // Variable for VECTOR norm.
     double _Complex mu;
 
-    if (matrix_vector_norm(vector, &mu))
-	    return NULL;
+    // Calculating VECTOR norm.
+    matrix_vector_norm(vector, &mu);
 
-    if (mu != 0.0 + 0.0 * I) {
+    // Calculating VECTOR norm.
+    if (mu != zero) {
         double _Complex beta = (vector->values)[0];
-        beta += (vector->values)[0] / cabs((vector->values)[0]) * mu;
-        
+        if (beta != zero)
+            beta += (vector->values)[0] / cabs((vector->values)[0]) * mu;
+        else 
+            beta += mu;
+
         for (size_t i = 1; i < vector_length; i++)
             (housholder_vector->values)[i] = (vector->values)[i] / beta; 
     }
     (housholder_vector->values)[0] = 1;
 
+    // Handling all elements close to zero.
     matrix_threshold_cut(housholder_vector);
 
     return housholder_vector;
 }
 
+/*
+ * Returns Housholder reflection matrix (allocates memory).
+ */
 struct matrix *matrix_housholder_vector_matrix(struct matrix *vector)
 {
     size_t length = vector->rows;
     
     struct matrix *housholder_vector = matrix_housholder_vector(vector);
-    struct matrix *transposed_hous_vec = matrix_transpose(housholder_vector);
+    struct matrix *transposed_hous_vec = 
+        matrix_hermitian_transpose(housholder_vector);
     struct matrix *hv_hvt = matrix_mul(housholder_vector, transposed_hous_vec);
     struct matrix *hvt_hv = matrix_mul(transposed_hous_vec, housholder_vector);
     
@@ -577,25 +647,32 @@ struct matrix *matrix_housholder_vector_matrix(struct matrix *vector)
     return hous_mtrx;
 }
 
-// row.house
-struct matrix *matrix_housholder_left_mul(struct matrix *mtrx, struct matrix *housholder_vector)
+/*
+ * Returns the product of Housholder matrix and MTRX 
+ * (HM * MTRX) (allocates memory).
+ */
+struct matrix *matrix_housholder_left_mul(struct matrix *mtrx, 
+    struct matrix *housholder_vector)
 {
-    struct matrix *transposed_housholder_vector = matrix_transpose(housholder_vector);
+    struct matrix *transposed_housholder_vector = 
+        matrix_hermitian_transpose(housholder_vector);
     if (!transposed_housholder_vector)
 	    return NULL;
 
-    struct matrix *hvt_hv_matrix = matrix_mul(transposed_housholder_vector, housholder_vector);
+    struct matrix *hvt_hv_matrix = matrix_mul(transposed_housholder_vector, 
+        housholder_vector);
     if (!hvt_hv_matrix) {
         matrix_free(transposed_housholder_vector);
         return NULL;
     }
+
     double _Complex hvt_hv = (hvt_hv_matrix->values)[0];
+    double _Complex beta = -2 / hvt_hv;
+
     matrix_free(hvt_hv_matrix);
     matrix_free(transposed_housholder_vector);
-
-    double _Complex beta = -2 / hvt_hv;
     
-    struct matrix *transposed_matrix = matrix_transpose(mtrx);
+    struct matrix *transposed_matrix = matrix_hermitian_transpose(mtrx);
     if (!transposed_matrix)
 	    return NULL;
     struct matrix *pre_omega = matrix_mul(transposed_matrix, housholder_vector);
@@ -604,7 +681,7 @@ struct matrix *matrix_housholder_left_mul(struct matrix *mtrx, struct matrix *ho
     matrix_free(pre_omega);
     matrix_free(transposed_matrix);
 
-    struct matrix *transposed_omega = matrix_transpose(omega);
+    struct matrix *transposed_omega = matrix_hermitian_transpose(omega);
     if (!transposed_omega) {
         matrix_free(omega);
         return NULL;
@@ -631,14 +708,20 @@ struct matrix *matrix_housholder_left_mul(struct matrix *mtrx, struct matrix *ho
     return result_matrix;
 }
 
-// col.house
-struct matrix *matrix_housholder_right_mul(struct matrix *mtrx, struct matrix *housholder_vector)
+/*
+ * Returns the product of MTRX and Householder matrix 
+ * (MTRX * HM) (allocates memory).
+ */
+struct matrix *matrix_housholder_right_mul(struct matrix *mtrx, 
+    struct matrix *housholder_vector)
 {
-    struct matrix *transposed_housholder_vector = matrix_transpose(housholder_vector);
+    struct matrix *transposed_housholder_vector = 
+        matrix_hermitian_transpose(housholder_vector);
     if (!transposed_housholder_vector)
 	    return NULL;
 
-    struct matrix *hvt_hv_matrix = matrix_mul(transposed_housholder_vector, housholder_vector);
+    struct matrix *hvt_hv_matrix = 
+        matrix_mul(transposed_housholder_vector, housholder_vector);
     if (!hvt_hv_matrix) {
         matrix_free(transposed_housholder_vector);
         return NULL;
@@ -649,8 +732,10 @@ struct matrix *matrix_housholder_right_mul(struct matrix *mtrx, struct matrix *h
 
     double _Complex beta = -2 / hvt_hv;
     
-    struct matrix *omega = matrix_mul(mtrx, housholder_vector);
-    omega = matrix_const_mul(omega, beta);
+    struct matrix *pre_omega = matrix_mul(mtrx, housholder_vector);
+    struct matrix *omega = matrix_const_mul(pre_omega, beta);
+
+    matrix_free(pre_omega);
     
     struct matrix *omega_vt = matrix_mul(omega, transposed_housholder_vector);
     if (!omega_vt) {
@@ -673,20 +758,25 @@ struct matrix *matrix_housholder_right_mul(struct matrix *mtrx, struct matrix *h
     return result_matrix;
 }
 
-
-// Add creating copy of initial matrix
-void matrix_housholder_transformation(struct matrix *mtrx, struct matrix **houshold_matrix)
+/*
+ * Returns upper triangular form of the MTRX (using Householder matrices).
+ */
+void matrix_housholder_transformation(struct matrix *mtrx, 
+    struct matrix **houshold_matrix)
 {
     size_t columns = mtrx->columns;
     size_t rows = mtrx->rows;
     
+    // Array for all found householder vectors.
     struct matrix *housholder_vectors[columns];
     
+    // Transforming MTRX.
     for (size_t i = 0; i < columns; i++) {
-	    struct matrix *vector = matrix_get_cut_column_vector(mtrx, i, i);
+	    struct matrix *vector = matrix_cut_matrix(mtrx, i, rows - 1, i, i);
         struct matrix *housholder_vector = matrix_housholder_vector(vector);
         housholder_vectors[i] = housholder_vector;
-        struct matrix *matrix_cut = matrix_cut_matrix(mtrx, i, i);
+        struct matrix *matrix_cut = 
+            matrix_cut_matrix(mtrx, i, rows - 1, i, columns - 1);
         struct matrix *cut_hous_mul_left_matrix = 
             matrix_housholder_left_mul(matrix_cut, housholder_vector);
         matrix_free(matrix_cut);
@@ -694,12 +784,14 @@ void matrix_housholder_transformation(struct matrix *mtrx, struct matrix **housh
         matrix_paste_matrix(mtrx, cut_hous_mul_left_matrix, i, i);
         matrix_free(cut_hous_mul_left_matrix);
     }
-
+    
+    // Matrix - product of all found Householder matrices.
     *houshold_matrix = matrix_get_identity_matrix(rows);
     
     for (size_t i = 0; i < columns; i++) {
         struct matrix *matrix_cut = 
-            matrix_cut_matrix(*houshold_matrix, columns - 1 - i, columns - 1 - i);
+            matrix_cut_matrix(*houshold_matrix, rows - 1 - i, rows - 1,
+                columns - 1 - i, columns - 1);
             
         struct matrix *cut_hous_mul_left_matrix = 
             matrix_housholder_left_mul(matrix_cut, 
@@ -715,20 +807,29 @@ void matrix_housholder_transformation(struct matrix *mtrx, struct matrix **housh
     }
 }
 
+/*
+ * Returns MTRX_A in upper Hessenberg form and MTRX_A in upper triangular 
+ * form (using Givens rotations and Housholder transformation). 
+ */
 void matrix_hessenberg_triangular_transformation(struct matrix **mtrx_a, 
     struct matrix *mtrx_b)
 {
+    // Transforming MTRX_B to triangular form.
     struct matrix *housholder_matrix;
     matrix_housholder_transformation(mtrx_b, &housholder_matrix);
+
     struct matrix *transposed_housholder_matrix = 
-        matrix_transpose(housholder_matrix);
+        matrix_hermitian_transpose(housholder_matrix);
+    matrix_free(housholder_matrix);
+
+    // Applying MTRX_B transformation to MTRX_A.
     struct matrix *new_mtrx_a = 
         matrix_mul(transposed_housholder_matrix, *mtrx_a);
-
     matrix_free(transposed_housholder_matrix);
 
     size_t order = new_mtrx_a->rows;
 
+    // Transforming MTRX_A to Hessenberg form.
     for (size_t j = 0; j < order - 2; j++)
         for (size_t i = order - 1; i > j + 1; i--) {
             struct givens_pair *givens_pair = 
@@ -736,19 +837,19 @@ void matrix_hessenberg_triangular_transformation(struct matrix **mtrx_a,
                     (new_mtrx_a->values)[i + j * order]);
 
             struct matrix *cut_mtrx_a = 
-                matrix_cut_row_matrix(new_mtrx_a, i - 1, i, j, order - 1);
+                matrix_cut_matrix(new_mtrx_a, i - 1, i, j, order - 1);
             struct matrix *rot_cut_mtrx_a = 
                 matrix_givens_left_mul(cut_mtrx_a, givens_pair);
-            matrix_paste_row_matrix(new_mtrx_a, rot_cut_mtrx_a, i-1, j);
+            matrix_paste_matrix(new_mtrx_a, rot_cut_mtrx_a, i-1, j);
 
             matrix_free(rot_cut_mtrx_a);
             matrix_free(cut_mtrx_a);
 
             struct matrix *cut_mtrx_b = 
-                matrix_cut_row_matrix(mtrx_b, i - 1, i, i - 1, order - 1);
+                matrix_cut_matrix(mtrx_b, i - 1, i, i - 1, order - 1);
             struct matrix *rot_cut_mtrx_b = 
                 matrix_givens_left_mul(cut_mtrx_b, givens_pair);
-            matrix_paste_row_matrix(mtrx_b, rot_cut_mtrx_b, i-1, i - 1);
+            matrix_paste_matrix(mtrx_b, rot_cut_mtrx_b, i - 1, i - 1);
 
             matrix_free(rot_cut_mtrx_b);
             matrix_free(cut_mtrx_b);
@@ -759,16 +860,16 @@ void matrix_hessenberg_triangular_transformation(struct matrix **mtrx_a,
                     (mtrx_b->values)[i + i * order]);
 
             cut_mtrx_a = 
-                matrix_cut_row_matrix(new_mtrx_a, 0, order - 1, i - 1, i);
+                matrix_cut_matrix(new_mtrx_a, 0, order - 1, i - 1, i);
             rot_cut_mtrx_a = matrix_givens_right_mul(cut_mtrx_a, givens_pair);
-            matrix_paste_row_matrix(new_mtrx_a, rot_cut_mtrx_a, 0, i - 1);
+            matrix_paste_matrix(new_mtrx_a, rot_cut_mtrx_a, 0, i - 1);
 
             matrix_free(rot_cut_mtrx_a);
             matrix_free(cut_mtrx_a);
 
-            cut_mtrx_b = matrix_cut_row_matrix(mtrx_b, 0, i, i - 1, i);
+            cut_mtrx_b = matrix_cut_matrix(mtrx_b, 0, i, i - 1, i);
             rot_cut_mtrx_b = matrix_givens_right_mul(cut_mtrx_b, givens_pair);
-            matrix_paste_row_matrix(mtrx_b, rot_cut_mtrx_b, 0, i - 1);
+            matrix_paste_matrix(mtrx_b, rot_cut_mtrx_b, 0, i - 1);
 
             matrix_free(rot_cut_mtrx_b);
             matrix_free(cut_mtrx_b);
@@ -779,99 +880,9 @@ void matrix_hessenberg_triangular_transformation(struct matrix **mtrx_a,
     *mtrx_a = new_mtrx_a;
 }
 
-double _Complex matrix_get_triangular_determinant(struct matrix *triangular_matrix)
-{
-    size_t order = triangular_matrix->rows;
-
-    double _Complex determinant = 1.0 + 0.0 * I;
-    
-    for (size_t i = 0; i < order; i++)
-	    determinant *= (triangular_matrix->values)[i + i * order];
-
-    return determinant;
-}
-
-double _Complex matrix_get_diagonal_mul(struct matrix *mtrx)
-{
-    double _Complex diagonal_mul = 1.0 + 0.0 * I;
-
-    size_t rows = mtrx->rows;
-    size_t columns = mtrx->columns;
-
-    size_t rank;
-    if (rows > columns)
-        rank = columns;
-    else
-        rank = rows;
-    
-    for (size_t i = 0; i < rank; i++)
-        diagonal_mul *= (mtrx->values)[i * rows + i];
-
-    return diagonal_mul;
-}
-
-struct matrix *matrix_get_triangular_inverse(struct matrix *triangular_matrix)
-{
-    if (matrix_get_triangular_determinant(triangular_matrix) == 0.0 + 0.0 * I)
-        return NULL;
-
-    size_t order = triangular_matrix->rows;
-
-    struct matrix *diagonal_inverse = matrix_get_zeros(order);
-
-    for (size_t i = 0; i < order; i++)
-        (diagonal_inverse->values)[i + i * order] = 
-            1 / (triangular_matrix->values)[i + i * order];
-
-    matrix_threshold_cut(diagonal_inverse);
-
-    struct matrix *inverse_upper_part = matrix_get_zeros(order);
-
-    for (size_t i = 0; i < order; i++)
-        for (size_t j = 0; j < order; j++) {
-            if (i < j)
-                (inverse_upper_part->values)[i + j * order] = 
-                    (triangular_matrix->values)[i + j * order];
-        }
-    
-    matrix_threshold_cut(inverse_upper_part);
-
-    struct matrix *negative_diagonal_inverse = 
-        matrix_const_mul(diagonal_inverse, -1.0 + 0.0 * I);
-
-    struct matrix *diag_upper_1 = matrix_get_identity_matrix(order);
-    struct matrix *diag_upper_2 = matrix_mul(negative_diagonal_inverse, 
-        inverse_upper_part);
-    matrix_free(inverse_upper_part);
-    matrix_free(negative_diagonal_inverse);
-
-    struct matrix *sum = matrix_sum(diag_upper_1, diag_upper_2);
-
-    matrix_free(diag_upper_1);
-
-    struct matrix *prev = diag_upper_2;
-
-    for (size_t i = 2; i < order; i++) {
-        struct matrix *curr = matrix_mul(diag_upper_2, prev);
-        struct matrix *temp_sum = matrix_sum(sum, curr);
-        matrix_free(sum);
-        sum = temp_sum;
-        if (prev != diag_upper_2)
-            matrix_free(prev);
-        prev = curr;
-    }
-
-    matrix_free(prev);
-
-    struct matrix *inverse = matrix_mul(sum, diagonal_inverse);
-
-    matrix_free(sum);
-    matrix_free(diagonal_inverse);
-    matrix_free(diag_upper_2);
-
-    return inverse;
-}
-
+/*
+ * Returns eigenvalues of second order MTRX (allocates memory).
+ */
 struct matrix *matrix_get_second_order_eigenvalues(struct matrix *mtrx)
 {
     size_t order = mtrx->rows;
@@ -881,6 +892,8 @@ struct matrix *matrix_get_second_order_eigenvalues(struct matrix *mtrx)
     double _Complex b = - (mtrx->values[0] + mtrx->values[3]);
     double _Complex c = mtrx->values[0] * mtrx->values[3] - mtrx->values[1] * 
         mtrx->values[2];
+
+    b = complex_threshold_cut(b);
     c = complex_threshold_cut(c);
 
     double _Complex D = b * b - 4 * a * c;
@@ -901,6 +914,10 @@ struct matrix *matrix_get_second_order_eigenvalues(struct matrix *mtrx)
     return eigenvalues;
 }
 
+/*
+ * Returns diagonal block matrix of MTRX_1, 
+ * MTRX_2 and MTRX_3 (allocates memory).
+ */
 struct matrix *matrix_diagonal_compose(struct matrix *mtrx_1, 
     struct matrix *mtrx_2, struct matrix *mtrx_3)
 {
@@ -921,38 +938,48 @@ struct matrix *matrix_diagonal_compose(struct matrix *mtrx_1,
         order += order_2;
     if (order_3)
         order += order_3;
+
     struct matrix *diag_comp = matrix_get_zeros(order);
 
     size_t left_coord = 0;
     if (mtrx_1) {
-        matrix_paste_row_matrix(diag_comp, mtrx_1, left_coord, left_coord);
+        matrix_paste_matrix(diag_comp, mtrx_1, left_coord, left_coord);
         left_coord += order_1;
     }
     if (mtrx_2) {
-        matrix_paste_row_matrix(diag_comp, mtrx_2, left_coord, left_coord);
+        matrix_paste_matrix(diag_comp, mtrx_2, left_coord, left_coord);
         left_coord += order_2;
     }
     if (mtrx_3)
-        matrix_paste_row_matrix(diag_comp, mtrx_3, left_coord, left_coord);
+        matrix_paste_matrix(diag_comp, mtrx_3, left_coord, left_coord);
     
     return diag_comp;
 }
 
+/*
+ * Returns the determinant of the MTRX.
+ */
 double _Complex matrix_determinant(struct matrix *mtrx)
 {
     size_t order = mtrx->rows;
 
-    double _Complex determinant = 0.0 + 0.0 * I;
+    double _Complex determinant = zero;
+
+    if (order == 1)
+        return (mtrx->values)[0];
 
     if (order == 2) {
         determinant = (mtrx->values)[0] * (mtrx->values)[3] - 
             (mtrx->values)[1] * (mtrx->values)[2];
+        // Handling value close to zero
         complex_threshold_cut(determinant);
         return determinant;
     }
 
+    // Calculating determinant by column 
+    // expansion (first column contains more zeros)
     for (size_t i = 0; i < order; i++)
-        if ((mtrx->values)[i] != 0.0 + 0.0 * I) {
+        if ((mtrx->values)[i] != zero) {
             double _Complex sign;
             if (i % 2 == 0)
                 sign = 1.0 + 0.0 * I;
@@ -964,22 +991,26 @@ double _Complex matrix_determinant(struct matrix *mtrx)
             matrix_free(min_mtrx);
         }
 
+    // Handling value close to zero
     complex_threshold_cut(determinant);
     return determinant;
 }
 
+/*
+ * Retuns MTRX inverse (allocates memory).
+ */
 struct matrix *matrix_inverse(struct matrix *mtrx)
 {
     size_t order = mtrx->rows;
 
     double _Complex determinant = matrix_determinant(mtrx);
 
-    if (determinant == 0.0 + 0.0 * I) 
+    if (determinant == zero) 
         return NULL;
 
     struct matrix *inverse = matrix_init(order, order);
 
-    for (size_t i = 0; i < order; i++) {
+    for (size_t i = 0; i < order; i++)
         for (size_t j = 0; j < order; j++) {
             struct matrix *min_mtrx = matrix_get_minor_matrix(mtrx, i, j);
             double _Complex sign;
@@ -991,9 +1022,8 @@ struct matrix *matrix_inverse(struct matrix *mtrx)
             matrix_free(min_mtrx);
             (inverse->values)[i + j * order] = minor;
         }
-    }
 
-    struct matrix *transposed_inverse = matrix_transpose(inverse);
+    struct matrix *transposed_inverse = matrix_hermitian_transpose(inverse);
     matrix_free(inverse);
 
     inverse = matrix_const_mul(transposed_inverse, 1 / determinant);
@@ -1002,27 +1032,31 @@ struct matrix *matrix_inverse(struct matrix *mtrx)
     return inverse;
 }
 
+/*
+ * Probably transforms MTRX_A to the upper quasitriangular form.
+ */
 void qz_step(struct matrix **mtrx_a, struct matrix **mtrx_b)
 {
+    size_t order = (*mtrx_a)->rows;
+
     struct matrix *b_inverse = matrix_inverse(*mtrx_b);
     struct matrix *m = matrix_mul(*mtrx_a, b_inverse);
     matrix_free(b_inverse);
-    
-    size_t order = (*mtrx_a)->rows;
 
     struct matrix *m_lower = 
-        matrix_cut_row_matrix(m, order - 2, order - 1, order - 2, order - 1);
+        matrix_cut_matrix(m, order - 2, order - 1, order - 2, order - 1);
 
     struct matrix *eigenvalues = 
         matrix_get_second_order_eigenvalues(m_lower);
     double _Complex a = eigenvalues->values[0];
     double _Complex b = eigenvalues->values[1];
-    
+
     matrix_free(eigenvalues);
     matrix_free(m_lower);
 
     struct matrix *id_order = matrix_get_identity_matrix(order);
-    struct matrix *id_first_col = matrix_get_column_vector(id_order, 0);
+    struct matrix *id_first_col = 
+        matrix_cut_matrix(id_order, 0, order - 1, 0, 0);
     struct matrix *a_id = matrix_const_mul(id_order, a);
     struct matrix *b_id = matrix_const_mul(id_order, b);
 
@@ -1043,7 +1077,7 @@ void qz_step(struct matrix **mtrx_a, struct matrix **mtrx_b)
     matrix_free(mul);
     matrix_free(id_first_col);
 
-    struct matrix *xyz_cut = matrix_cut_row_matrix(xyz_vector, 0, 2, 0, 0);
+    struct matrix *xyz_cut = matrix_cut_matrix(xyz_vector, 0, 2, 0, 0);
     matrix_free(xyz_vector);
 
     for (size_t i = 0; i < order - 2; i++) {
@@ -1167,20 +1201,28 @@ void qz_step(struct matrix **mtrx_a, struct matrix **mtrx_b)
     *mtrx_b = new_mtrx_b;
 }  
 
+/*
+ * Prints general eigenvalue of first order matrices MTRX_A and MTRX_B.
+ */
 int matrix_general_1eigenvalue(struct matrix *mtrx_a, 
     struct matrix *mtrx_b)
 {
-    if ((mtrx_b->values)[0] == 0.0 + 0.0 * I) {
-        if ((mtrx_a->values)[0] == 0.0 + 0.0 * I)
+    if ((mtrx_b->values)[0] == zero) {
+        if ((mtrx_a->values)[0] == zero) {
             printf("Infinte number of eigenvalues (initial matrix B "
                 "was singular)\n");
-        else
-            printf("There is no eigenvalues (initial matrix B was singular)\n");
-        
+                
+            matrix_free(mtrx_a);
+            matrix_free(mtrx_b);
+
+            return 1;
+        }
+        printf("One soulution is lost (initial matrix B was singular)\n");
+
         matrix_free(mtrx_a);
         matrix_free(mtrx_b);
-        
-        return 1;
+
+        return 0;
     }
 
     double _Complex lambda = (mtrx_a->values)[0] / (mtrx_b->values)[0];
@@ -1192,6 +1234,9 @@ int matrix_general_1eigenvalue(struct matrix *mtrx_a,
     return 0;
 }
 
+/*
+ * Prints general eigenvalue of first order matrices MTRX_A and MTRX_B.
+ */
 int matrix_general_2eigenvalues(struct matrix *mtrx_a, 
     struct matrix *mtrx_b)
 {
@@ -1202,9 +1247,9 @@ int matrix_general_2eigenvalues(struct matrix *mtrx_a,
     double _Complex c = (mtrx_a->values)[0] * (mtrx_a->values)[3] - 
         (mtrx_a->values)[1] * (mtrx_a->values)[2];
 
-    if (a == 0.0 + 0.0 * I)
-        if (b == 0.0 + 0.0 * I) {
-            if (c = 0.0 + 0.0 * I)
+    if (a == zero) {
+        if (b == zero) {
+            if (c == zero)
                 printf("Infinite number of eigenvalues (initial matrix B "
                     "was singular)\n");
             else 
@@ -1227,6 +1272,7 @@ int matrix_general_2eigenvalues(struct matrix *mtrx_a,
             
             return 0;
         }
+    }
     
     double _Complex d = b * b - 4 * a * c;
 
@@ -1242,42 +1288,192 @@ int matrix_general_2eigenvalues(struct matrix *mtrx_a,
     return 0;
 }
 
-void qz_process(struct matrix **mtrx_a, struct matrix **mtrx_b)
-{   
-    matrix_hessenberg_triangular_transformation(mtrx_a, *mtrx_b);
+/*
+ * Returns index of zero on the diagonal of MTRX.
+ */
+size_t matrix_diagonal_zero(struct matrix *mtrx)
+{
+    size_t order = mtrx->rows;
 
-    double _Complex triag_det = matrix_get_triangular_determinant(*mtrx_b);
-    if (triag_det == 0.0 + 0.0 * I) {
-        printf("Matrix B is singular or close to be singular\n");
-        return;
+    for (size_t i = 0; i < order; i++)
+        if ((mtrx->values)[i + i * order] == zero)
+            return i;
+    
+    return order;
+}
+
+/*
+ * Moves zero on MTRX_B diagonal to the (n, n) position and 
+ * sets zero on position (n, n - 1) of MTRX_A.
+ */
+void zero_shift(struct matrix **mtrx_a, struct matrix **mtrx_b, size_t zero_pos)
+{
+    size_t order = (*mtrx_a)->rows;
+
+    for (size_t i = zero_pos + 1; i < order; i++) {
+        struct givens_pair *givens_pair = 
+            givens_pair_find(((*mtrx_b)->values)[i - 1 + i * order],
+                ((*mtrx_b)->values)[i + i * order]);
+        
+        struct matrix *cut_a = 
+            matrix_cut_matrix(*mtrx_a, i - 1, i, 0, order - 1);
+        struct matrix *cut_a_rot = matrix_givens_left_mul(cut_a, givens_pair);
+        matrix_free(cut_a);
+        matrix_paste_matrix(*mtrx_a, cut_a_rot, i - 1, 0);
+        matrix_free(cut_a_rot);
+        
+        struct matrix *cut_b = 
+            matrix_cut_matrix(*mtrx_b, i - 1, i, 0, order - 1);
+        struct matrix *cut_b_rot = matrix_givens_left_mul(cut_b, givens_pair);
+        matrix_free(cut_b);
+        matrix_paste_matrix(*mtrx_b, cut_b_rot, i - 1, 0);
+        matrix_free(cut_b_rot);
+
+        free(givens_pair);
+
+        if (i > 1) {
+            givens_pair = 
+                givens_pair_find(((*mtrx_a)->values)[i + (i - 2) * order],
+                    ((*mtrx_a)->values)[i + (i - 1) * order]);
+            cut_a = matrix_cut_matrix(*mtrx_a, 0, order - 1, i - 2, i - 1);
+            cut_a_rot = matrix_givens_right_mul(cut_a, givens_pair);
+            matrix_free(cut_a);
+            matrix_paste_matrix(*mtrx_a, cut_a_rot, 0, i - 2);
+            matrix_free(cut_a_rot);
+            
+            cut_b = matrix_cut_matrix(*mtrx_b, 0, order - 1, i - 2, i - 1);
+            cut_b_rot = matrix_givens_right_mul(cut_b, givens_pair);
+            matrix_free(cut_b);
+            matrix_paste_matrix(*mtrx_b, cut_b_rot, 0, i - 2);
+            matrix_free(cut_b_rot);
+
+            free(givens_pair);
+        }
     }
 
+    struct givens_pair *givens_pair = 
+        givens_pair_find(((*mtrx_a)->values)[order -1 + (order - 2) * order],
+            ((*mtrx_a)->values)[order - 1 + (order - 1) * order]);
+    
+    struct matrix *cut_a = 
+        matrix_cut_matrix(*mtrx_a, 0, order - 1, order - 2, order - 1);
+    struct matrix *cut_a_rot = matrix_givens_right_mul(cut_a, givens_pair);
+    matrix_free(cut_a);
+    matrix_paste_matrix(*mtrx_a, cut_a_rot, 0, order - 2);
+    matrix_free(cut_a_rot);
+
+    struct matrix *cut_b = 
+        matrix_cut_matrix(*mtrx_b, 0, order - 1, order - 2, order - 1);
+    struct matrix *cut_b_rot = matrix_givens_right_mul(cut_b, givens_pair);
+    matrix_free(cut_b);
+    matrix_paste_matrix(*mtrx_b, cut_b_rot, 0, order - 2);
+    matrix_free(cut_b_rot);
+
+    free(givens_pair);
+}
+
+/*
+ * Reduces sizes of matrices MTRX_A and MTRX_B (if MTRX_B is singular). 
+ * Moreover, checks if there is infinite number of 
+ * eigenvalues (when (n,n) MTRX_A value is also zero).
+ */
+int diagonal_zero_reduce(struct matrix **mtrx_a, struct matrix **mtrx_b)
+{
+    size_t order = (*mtrx_a)->rows;
+    size_t zero_position = matrix_diagonal_zero(*mtrx_b);
+
+    while (zero_position != order) {
+        
+        if (order == 1) {
+            if (((*mtrx_a)->values)[0] == zero) {
+                printf("Infinite number of eigenvalues (initial matrix B "
+                    "was singular)\n");
+                return 1;
+            }
+            printf("One eigenvalue is lost (initial matrix B "
+                "was singular)\n");
+            return 1;
+        }
+        
+        zero_shift(mtrx_a, mtrx_b, zero_position);
+
+        if (((*mtrx_a)->values)[order - 1 + (order - 1) * order] == zero) {
+            printf("Infinite number of eigenvalues (initial matrix B "
+                    "was singular)\n");
+            return 1;
+        }
+        else
+            printf("One eigenvalue is lost (initial matrix B "
+                "was singular)\n");
+        
+        struct matrix *new_mtrx_a = 
+            matrix_cut_matrix(*mtrx_a, 0, order - 2, 0, order - 2);
+        matrix_free(*mtrx_a);
+        *mtrx_a = new_mtrx_a;
+        
+        struct matrix *new_mtrx_b = 
+            matrix_cut_matrix(*mtrx_b, 0, order - 2, 0, order - 2);
+        matrix_free(*mtrx_b);
+        *mtrx_b = new_mtrx_b;
+
+        order = (*mtrx_a)->rows;
+        zero_position = matrix_diagonal_zero(*mtrx_b);
+    }
+
+    return 0;
+}
+
+/*
+ * Prints eigenvalues of matrix pair MTRX_A and MTRX_B. 
+ * Solves generalised problem det(A - lambda * B) = 0.
+ */
+void qz_process(struct matrix **mtrx_a, struct matrix **mtrx_b)
+{   
+    size_t order = (*mtrx_a)->rows;
+
+    if (order == 2) {
+        matrix_general_2eigenvalues(*mtrx_a, *mtrx_b);
+        return;
+    }
+    if (order == 1) {
+        matrix_general_1eigenvalue(*mtrx_a, *mtrx_b);
+        return;
+    }
+        
+    matrix_hessenberg_triangular_transformation(mtrx_a, *mtrx_b);
+
+    if (diagonal_zero_reduce(mtrx_a, mtrx_b))
+        return;
+
     while (1) {
-        size_t order = (*mtrx_a)->rows;
+        order = (*mtrx_a)->rows;
         for (size_t j = 1; j < order; j++)
             if (cabs(((*mtrx_a)->values)[j + (j - 1) * order]) <= 
             epsilon * (cabs(((*mtrx_a)->values)[j - 1 + (j - 1) * order]) + 
                 cabs(((*mtrx_a)->values)[j + j * order])))
-                    ((*mtrx_a)->values)[j + (j - 1) * order] = 0.0 + 0.0 * I;
+                    ((*mtrx_a)->values)[j + (j - 1) * order] = zero;
         
         int found = 1;
         while (found) {
             order = (*mtrx_a)->rows;
-
+        
             if (order == 2) {
                 matrix_general_2eigenvalues(*mtrx_a, *mtrx_b);
                 return;
             }
+
             if (order == 1) {
                 matrix_general_1eigenvalue(*mtrx_a, *mtrx_b);
                 return;
             }
 
-            if (((*mtrx_a)->values)[2 + order] == 0.0 + 0.0 * I) {
-                struct matrix *small_a = matrix_cut_row_matrix(*mtrx_a, 0, 1, 0, 1);
-                struct matrix *new_mtrx_a = matrix_cut_matrix(*mtrx_a, 2, 2);
-                struct matrix *small_b = matrix_cut_row_matrix(*mtrx_b, 0, 1, 0, 1);
-                struct matrix *new_mtrx_b = matrix_cut_matrix(*mtrx_b, 2, 2);
+            if (((*mtrx_a)->values)[2 + order] == zero) {
+                struct matrix *small_a = matrix_cut_matrix(*mtrx_a, 0, 1, 0, 1);
+                struct matrix *new_mtrx_a = 
+                    matrix_cut_matrix(*mtrx_a, 2, order - 1, 2, order - 1);
+                struct matrix *small_b = matrix_cut_matrix(*mtrx_b, 0, 1, 0, 1);
+                struct matrix *new_mtrx_b = 
+                    matrix_cut_matrix(*mtrx_b, 2, order - 1, 2, order - 1);
                 matrix_general_2eigenvalues(small_a, small_b);
                 matrix_free(*mtrx_a);
                 matrix_free(*mtrx_b);
@@ -1286,11 +1482,13 @@ void qz_process(struct matrix **mtrx_a, struct matrix **mtrx_b)
                 continue;
             }
 
-            if (((*mtrx_a)->values)[1] == 0.0 + 0.0 * I) {
-                struct matrix *small_a = matrix_cut_row_matrix(*mtrx_a, 0, 0, 0, 0);
-                struct matrix *new_mtrx_a = matrix_cut_matrix(*mtrx_a, 1, 1);
-                struct matrix *small_b = matrix_cut_row_matrix(*mtrx_b, 0, 0, 0, 0);
-                struct matrix *new_mtrx_b = matrix_cut_matrix(*mtrx_b, 1, 1);
+            if (((*mtrx_a)->values)[1] == zero) {
+                struct matrix *small_a = matrix_cut_matrix(*mtrx_a, 0, 0, 0, 0);
+                struct matrix *new_mtrx_a = 
+                    matrix_cut_matrix(*mtrx_a, 1, order - 1, 1, order - 1);
+                struct matrix *small_b = matrix_cut_matrix(*mtrx_b, 0, 0, 0, 0);
+                struct matrix *new_mtrx_b = 
+                    matrix_cut_matrix(*mtrx_b, 1, order - 1, 1, order - 1);
                 matrix_general_1eigenvalue(small_a, small_b);
                 matrix_free(*mtrx_a);
                 matrix_free(*mtrx_b);
@@ -1299,15 +1497,17 @@ void qz_process(struct matrix **mtrx_a, struct matrix **mtrx_b)
                 continue;
             }
 
-            if (((*mtrx_a)->values)[order - 2 + (order - 3) * order] == 0.0 + 0.0 * I) {
+            if (((*mtrx_a)->values)[order - 2 + (order - 3) * order] == zero) {
                 struct matrix *small_a = 
-                    matrix_cut_matrix(*mtrx_a, order - 2, order - 2);
+                    matrix_cut_matrix(*mtrx_a, order - 2, order - 1,
+                        order - 2, order - 1);
                 struct matrix *new_mtrx_a = 
-                    matrix_cut_row_matrix(*mtrx_a, 0, order - 3, 0, order - 3);
+                    matrix_cut_matrix(*mtrx_a, 0, order - 3, 0, order - 3);
                 struct matrix *small_b = 
-                    matrix_cut_matrix(*mtrx_b, order - 2, order - 2);
+                    matrix_cut_matrix(*mtrx_b, order - 2, order - 1, 
+                        order - 2, order - 1);
                 struct matrix *new_mtrx_b = 
-                    matrix_cut_row_matrix(*mtrx_b, 0, order - 3, 0, order - 3);
+                    matrix_cut_matrix(*mtrx_b, 0, order - 3, 0, order - 3);
                 matrix_general_2eigenvalues(small_a, small_b);
                 matrix_free(*mtrx_a);
                 matrix_free(*mtrx_b);
@@ -1316,15 +1516,17 @@ void qz_process(struct matrix **mtrx_a, struct matrix **mtrx_b)
                 continue;
             }
 
-            if (((*mtrx_a)->values)[order - 1 + (order - 2) * order] == 0.0 + 0.0 * I) {
+            if (((*mtrx_a)->values)[order - 1 + (order - 2) * order] == zero) {
                 struct matrix *small_a = 
-                    matrix_cut_matrix(*mtrx_a, order - 1, order - 1);
+                    matrix_cut_matrix(*mtrx_a, order - 1, order - 1, 
+                        order - 1, order - 1);
                 struct matrix *new_mtrx_a = 
-                    matrix_cut_row_matrix(*mtrx_a, 0, order - 2, 0, order - 2);
+                    matrix_cut_matrix(*mtrx_a, 0, order - 2, 0, order - 2);
                 struct matrix *small_b = 
-                    matrix_cut_matrix(*mtrx_b, order - 1, order - 1);
+                    matrix_cut_matrix(*mtrx_b, order - 1, order - 1, 
+                        order - 1, order - 1);
                 struct matrix *new_mtrx_b = 
-                    matrix_cut_row_matrix(*mtrx_b, 0, order - 2, 0, order - 2);
+                    matrix_cut_matrix(*mtrx_b, 0, order - 2, 0, order - 2);
                 matrix_general_1eigenvalue(small_a, small_b);
                 matrix_free(*mtrx_a);
                 matrix_free(*mtrx_b);
